@@ -1,0 +1,216 @@
+\documentclass[11pt]{article}
+\usepackage{CJK}
+\usepackage[top=2cm, bottom=2cm, left=2cm, right=2cm]{geometry}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\usepackage{amssymb}
+ 
+\floatname{algorithm}{Algorithm}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+ 
+\begin{document}
+\begin{CJK*}{UTF8}{gkai}
+%SetUp函数
+ 
+    \begin{algorithm}
+        \caption{Symbol Propagation in Convolutional Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, the convolution layer parameters including kernel $w$, bias $b$, padding $p$ and stride $s$}
+        \Ensure {Symbol output $y$}
+            \Function {ConvPropagation}{$x$,$w$,$b$,$p$,$s$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State Initialize $y$ with shape ($w_o$, $y_h$, $y_w$) to value 0;
+                \State Compute the padding of $x$ as $x_p$ with input $x$ and padding $p$;
+                
+                %forall
+                \ForAll {output channels}  
+                    \ForAll{input channels}
+                        \ForAll{output height $y_h$}
+                            \State Compute the corresponding begin and end height index in $x_p$;
+                            \ForAll{output width $y_w$}
+                                \State Compute the corresponding begin and end width index in $x_p$;
+                                \State Initialize $local_y$ as dictionary and initialize it to 0;
+                                \State Compute $local_y$ with symbol convolution multiplication for every input $x_p$ between begin and end height and width, which for $xi$, $wi$ in x_p, $local_y$ += $wi$ * $w$, where $xi$ is symbol, $wi$ is its weight and $w$ is the convolution kernel value;
+                                \State Set the corresponding position of $y$ to $local_y$ if $y$=0, else add them together;
+                            \EndFor
+                        \EndFor
+                    \EndFor
+                    \State Add bias $b$ to every channel of output $y$;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    \begin{algorithm}
+        \caption{Symbol Propagation in Fully Connected Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, weight $w$, bias $b$}
+        \Ensure {Symbol output $y$}
+            \Function {LinearPropagation}{$x$,$w$,$b$}
+                
+                \State Initialize $y$ with shape ($w_o$) to value 0;
+                
+                %forall
+                \ForAll {output channels}
+                    Initialize $local_y$ as dictionary and initialize it to 0;
+                    \ForAll{input channels}
+                        Compute $local_y$ with symbol matmul multiplication for every input $x$, which for $xi$, $wi$ in $x$, $local_y$[xi] += $wi$ * $w$, $xi$ is the symbol, $wi$ is the weight of $xi$ and $w$ is the weight of fully connected layer;
+                    \EndFor
+                    \State Add bias $b$ to $local_y$;
+                    \State Append $local_y$ to the end of $y$;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{Symbol Propagation in Activation Function Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, activation function $f$, interval input value $x_l$, $x_h$}
+        \Ensure {Symbol output $y$, interval output value $y_l$, $y_h$}
+            \Function {ActivationPropagation}{$x$,$f$,$x_l$,$x_h$}
+                
+                \State Initialize $y_l$, $y_h$ with shape $x$ to value 0;
+                \State Initialize $y$ with shape $x$ to empty dictionary;
+                
+                %forall
+                \ForAll {dimension of input $x$}
+                    \State $sum_l\gets 0.0$;
+                    \State $sum_h\gets 0.0$;
+                    \ForAll{symbol $xi$ and its weight $wi$ in dictionary x}
+                        \If{$xi$ is the symbol of bias}
+                            \State $sum_l\gets sum_l + wi$;
+                            \State $sum_h\gets sum_h + wi$;
+                        \Else
+                            \State Get the true value interval of $xi$ as $local_l$ and $local_h$;
+                            \If{$wi$ > 0}
+                                \State $sum_l\gets sum_l + wi * local_l$;
+                                \State $sum_h\gets sum_h + wi * local_h$;
+                            \Else
+                                \State $sum_l\gets sum_l + wi * local_h$;
+                                \State $sum_h\gets sum_h + wi * local_l$;
+                            \EndIf
+                        \EndIf
+                        \State Set the corresponding position value of $y_l$ to $f$($sum_l$), set the corresponding position value of $y_h$ to $f$($sum_h$), where $f$ is the activation function;
+                        \State Set the corresponding position value of $y$ as \{'xi':1\}, where $xi$ is the new symbol and 1 is its initial weight;
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$, $y_l$, $y_h$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{Symbol Propagation in Batch Normalization Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, the mean of train batch inputs $mean$, the variance of train batch inputs $var$, the weight $gamma$, the bias $beta$ and a minimal value $eps$ to avoid zero division of this layer}
+        \Ensure {Symbol output $y$}
+            \Function {LinearPropagation}{$x$,$mean$,$var$,$gamma$,$beta$,$eps$}
+                
+                \State Initialize $y$ with the shape of $x$ as a dictionary;
+                
+                %forall
+                \ForAll {dimension of input $x$}
+                    \ForAll{symbol $xi$ and its weight $wi$ in dictionary $x$}
+                        \State $y[xi]\gets wi * gamma / \sqrt{var + eps}$;
+                    \EndFor
+                    \State $b\gets -mean * gamma / \sqrt{var + eps} + beta$;
+                    \State Set the weight of bias symbol of $y$ to ($x_b$-$b$) where $x_b$ is the weight of bias symbol of $x$;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{Symbol Propagation in Max Pooling Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, the size of pooling window $kernel\_size$, padding $p$, stride $s$, the lower and upper bound of $x$ $x_l$, $x_h$}
+        \Ensure {Symbol output $y$, the lower and upper bound of $y$ $y_l$, $y_h$}
+            \Function {LinearPropagation}{$x$,$kernel_size$,$p$,$s$,$x_l$,$x_h$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State Initialize $y$ with shape ($x_c$, $y_h$, $y_w$) to empty dictionary;
+                \State Initialize $y_l$, $y_h$ with the shape of $y$ to value 0;
+                \State Compute the pad of $x$ $x_p$ with input $x$ and padding $p$;
+                
+                %forall
+                \ForAll {input channels}
+                    \ForAll{point of output $y$}
+                        \State Compute the corresponding area $a$ of input $x$;
+                        \State $local_l\gets +\infty$;
+                        \State $local_h\gets -\infty$;
+                        \ForAll{point $p$ in area $a$}
+                            \If{$p$ is not a padding point}
+                                \State Compute the true upper bound and lower bound of x as $xb_l$, $xb_h$; 
+                                \State $local_l\gets max(local_l, xb_l)$;
+                                \State $local_h\gets max(local_h, xb_h)$;
+                            \Else
+                                \State Do nothing;
+                            \EndIf
+                        \EndFor
+                        \State Set the corresponding position of $y$ to $y[xi]\gets 1$ where $xi$ is the new symbol and 1 is its weight;
+                        \State Set the corresponding position of $y_l$, $y_h$ to value $local_l$, $local_h$
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$, $y_l$, $y_h$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{Symbol Propagation in Average Pooling Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {Symbol input $x$, the size of pooling window $kernel\_size$, padding $p$, stride $s$}
+        \Ensure {Symbol output $y$}
+            \Function {LinearPropagation}{$x$,$kernel_size$,$p$,$s$,$x_l$,$x_h$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State Initialize $y$ with shape ($x_c$, $y_h$, $y_w$) to empty dictionary;
+                \State Compute the pad of $x$ $x_p$ with input $x$ and padding $p$;
+                
+                %forall
+                \ForAll {input channels}
+                    \ForAll{point of output $y$}
+                        \State Compute the corresponding area $a$ of input $x$;
+                        \ForAll{point $p$ in area $a$}
+                            \If{$p$ is not a padding point}
+                                \State For every symbol $xi$ and its weight $wi$ in $p$, the corresponding output $y[xi]$ += $wi$;
+                            \Else
+                                \State Do nothing;
+                            \EndIf
+                        \EndFor
+                    \EndFor
+                \EndFor
+                \State Calculate the number of elements in pooling window as $div$;
+                \ForAll{dimension of $y$}:
+                    \ForAll{$xi$, $wi$ in $y$}
+                        $y[xi]\gets wi / div$;
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+\end{CJK*}
+\end{document}
