@@ -1,0 +1,298 @@
+\documentclass[11pt]{article}
+\usepackage{CJK}
+\usepackage[top=2cm, bottom=2cm, left=2cm, right=2cm]{geometry}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\usepackage{amssymb}
+ 
+\floatname{algorithm}{Algorithm}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+ 
+\begin{document}
+\begin{CJK*}{UTF8}{gkai}
+%SetUp函数
+ 
+    \begin{algorithm}
+        \caption{卷积层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 卷积层参数包括卷积核 $w$, 偏移 $b$, 填充 $p$ and 步长 $s$}
+        \Ensure {符号输出 $y$}
+            \Function {ConvPropagation}{$x$,$w$,$b$,$p$,$s$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State 初始化 $y$ 为形状是 ($w_o$, $y_h$, $y_w$) 的三维数组，每个元素值为0;
+                \State 使用输入$x$ 和填充 $p$ 计算 经过填充后的输入 $x_p$;
+                
+                %forall
+                \ForAll {输出通道}  
+                    \ForAll{输入通道}
+                        \ForAll{输出张量高 $y_h$}
+                            \State 计算每个输出点对应输入 $x_p$ 在“高”这个维度的卷积输入范围;
+                            \ForAll{输出张量宽 $y_w$}
+                                \State 计算每个输出点对应输入 $x_p$ 在“宽”这个维度的卷积输入范围;
+                                \State 初始化 $local_y$ 为一个字典，将字典每个值默认设置为 0;
+                                \State 对于在“高”这个维度的所卷积有输入范围和“宽“这个维度的所有卷积输入范围，使用符号卷积乘法计算$local_y$，这意味着对于输入$x_p$中的每个符号 $xi$和权重 $wi$, $local_y$ += $wi$ * $w$, 其中$w$是卷积层的卷积核。
+                                \State 如果输出$y$对应点的值为0，设置 该点的值为 $local_y$，否则将新$local_y$和原点的值相加。
+                            \EndFor
+                        \EndFor
+                    \EndFor
+                    \State 将偏移 $b$ 加到输出 $y$ 的每个输出通道上;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    \begin{algorithm}
+        \caption{全连接层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 全连接层权重 $w$, 偏移 $b$}
+        \Ensure {符号输出 $y$}
+            \Function {LinearPropagation}{$x$,$w$,$b$}
+                
+                \State 初始化 $y$ 为长度是 ($w_o$) 的向量，并且赋值为 0;
+                
+                %forall
+                \ForAll {输出通道}
+                    初始化 $local_y$ 为一个字典，将字典每个值默认设置为 0;
+                    \ForAll{input channels}
+                        对输入$x$和权重$w$使用符号矩阵乘法计算输出 $local_y$ , 对$x$中的每个符号 $xi$和权重 $wi$ , $local_y$[xi] += $wi$ * $w$, 其中$w$是全连接层的权重。
+                    \EndFor
+                    \State 将偏移 $b$ 加到向量 $local_y$的每个值上;
+                    \State 将$y$的对应位置赋值为$local_y$;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{激活函数层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 激活函数 $f$, 每个输入符号的下界和上界 $x_l$, $x_h$}
+        \Ensure {符号输出 $y$, 每个输出符号的下界和上界 $y_l$, $y_h$}
+            \Function {ActivationPropagation}{$x$,$f$,$x_l$,$x_h$}
+                
+                \State 使用$x$的形状初始化 $y_l$, $y_h$，并且设置初始值 0;
+                \State 使用$x$的形状初始化 $y$ 为字典，并且设置字典值默认值0;
+                
+                %forall
+                \ForAll {输入 $x$的维度}
+                    \State $sum_l\gets 0.0$;
+                    \State $sum_h\gets 0.0$;
+                    \ForAll{字典$x$中的符号 $xi$ 和权重 $wi$}
+                        \If{$xi$ 是专门表示偏移（常数）的符号}
+                            \State $sum_l\gets sum_l + wi$;
+                            \State $sum_h\gets sum_h + wi$;
+                        \Else
+                            \State 获得 $xi$ 的真实值区间的上下界 $local_l$ 和 $local_h$;
+                            \If{$wi$ > 0}
+                                \State $sum_l\gets sum_l + wi * local_l$;
+                                \State $sum_h\gets sum_h + wi * local_h$;
+                            \Else
+                                \State $sum_l\gets sum_l + wi * local_h$;
+                                \State $sum_h\gets sum_h + wi * local_l$;
+                            \EndIf
+                        \EndIf
+                        \State 将输出下界 $y_l$ 的对应位置设置为 $f$($sum_l$), 将输出上界 $y_h$ 的对应位置设置为 $f$($sum_h$), 其中 $f$ 是激活函数;
+                        \State 设置输出 $y$ 对应的位置为 \{'xi':1\}, 其中 $xi$ 是新的抽象符号， 1是符号$xi$的初始权重;
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$, $y_l$, $y_h$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{批量归一化层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 这个批量输入的均值 $mean$, 这个批量输入的方差 $var$, 批量归一化层权重 $gamma$, 偏移 $beta$，一个为了防止除以0而设置的最小量 $eps$}
+        \Ensure {符号输出 $y$}
+            \Function {LinearPropagation}{$x$,$mean$,$var$,$gamma$,$beta$,$eps$}
+                
+                \State 使用$x$的形状初始化 $y$，其中每个位置都为字典;
+                
+                %forall
+                \ForAll {输入 $x$的维度}
+                    \ForAll{输入$x$中的每个符号 $xi$ 和它对应的权重 $wi$}
+                        \State $y[xi]\gets wi * gamma / \sqrt{var + eps}$;
+                    \EndFor
+                    \State $b\gets -mean * gamma / \sqrt{var + eps} + beta$;
+                    \State  将输出$y$中偏移（常量）符号的权重设置为 ($x_b$-$b$)，其中 $x_b$ 是输入 $x$中偏移（常量）富豪的权重;
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{最大池化层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 池化窗口的大小 $kernel\_size$, 池化层填充 $p$, 步长 $s$, 符号符号 $x$ 的值区间的下界和上界$x_l$, $x_h$}
+        \Ensure {符号输出 $y$, 符号输出 $y$的值区间的下界和上界 $y_l$, $y_h$}
+            \Function {LinearPropagation}{$x$,$kernel_size$,$p$,$s$,$x_l$,$x_h$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State 初始化 $y$ 为形状是 ($x_c$, $y_h$, $y_w$) 的三维数组，每个元素为字典;
+                \State 初始化 $y_l$, $y_h$ 具有和 $y$ 相同的形状，初始值为0;
+                \State 使用符号输入$x$和填充$p$ 计算 $x$经过填充后的结果 $x_p$;
+                
+                %forall
+                \ForAll {输入通道}
+                    \ForAll{输出 $y$的点}
+                        \State 计算该点对应输入$x$中的区域$a$;
+                        \State $local_l\gets +\infty$;
+                        \State $local_h\gets -\infty$;
+                        \ForAll{区域$a$中的点$p$}
+                            \If{$p$ 不是填充产生的点}
+                                \State 计算该点的真实输入值区间上下界 $xb_l$, $xb_h$; 
+                                \State $local_l\gets max(local_l, xb_l)$;
+                                \State $local_h\gets max(local_h, xb_h)$;
+                            \Else
+                                \State 什么也不做;
+                            \EndIf
+                        \EndFor
+                        \State 设置 $y$ 中对应的位置值为 $y[xi]\gets 1$，其中 $xi$ 是经过最大池化层后新的符号，它的初始权重为1;
+                        \State 设置 $y_l$, $y_h$ 中对应位置的上下界值为 $local_l$, $local_h$
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$, $y_l$, $y_h$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    \begin{algorithm}
+        \caption{平均池化层符号传播}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {符号输入 $x$, 池化窗口大小 $kernel\_size$, 池化层填充 $p$, 步长 $s$}
+        \Ensure {符号输出 $y$}
+            \Function {LinearPropagation}{$x$,$kernel_size$,$p$,$s$,$x_l$,$x_h$}
+                
+                \State $y_h\gets (x_h + p_h * 2 - w_h) / s_h + 1$;
+                \State $y_w\gets (x_w + p_w * 2 - w_w) / s_w + 1$;
+                \State 初始化 $y$ 为形状是 ($x_c$, $y_h$, $y_w$) 的三维数组，每个元素为字典;
+                \State 使用符号输入$x$和填充$p$计算 $x$经过填充后的值 $x_p$ 
+                
+                %forall
+                \ForAll {输入通道}
+                    \ForAll{输出$y$的每个点}
+                        \State 计算该点对应的在输入$x$的区域$a$;
+                        \ForAll{区域$a$的点$p$}
+                            \If{$p$不是经过填充产生的点}
+                                \State 对该点$p$的每个输入符号 $xi$ 和它的权重$wi$, 设置对应的输入 $y[xi]$ += $wi$;
+                            \Else
+                                \State 什么也不做;
+                            \EndIf
+                        \EndFor
+                    \EndFor
+                \EndFor
+                \State 计算池化窗口中元素的数目 $div$;
+                \ForAll{输出$y$的通道}:
+                    \ForAll{ $y$中的$xi$和$wi$}  
+                        \State $y[xi]\gets wi / div$;
+                    \EndFor
+                \EndFor
+                \State
+                \Return $y$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    
+    
+    \begin{algorithm}
+        \caption{区间比较法}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {标签列表 $l$, 真正的标签 $tl$, 标签对应的区间值 $interval$}
+        \Ensure {错误标签列表 $wl$}
+            \Function {IntervalCompare}{$l$,$tl$,$interval$}
+                
+                \State 初始化错误标签列表: $wl\gets []$;
+                
+                \ForAll{ 标签列表$l$的标签$label$ }
+                    \State $i1\gets interval[tl]$;
+                    \State $i2\gets interval[label]$;
+                    \State 将值表示为区间： [$a$,$b$] = $i1$, [$c$,$d$] = $i2$;
+                    \If{$a$ \textless $d$}
+                        \State 将 $label$ 添加到 $wl$;
+                    \EndIf
+                \EndFor
+                \State
+                \Return $wl$
+                
+                
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    
+    
+    
+    
+    \begin{algorithm}
+        \caption{激活函数层反向符号传播算法}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {希望取小的符号的集合 $want\_min$, 希望取大的符号的集合 $want\_max$, want\_min 和 want\_max 中每个符号希望的权 $weight\_dic$, 输入符号表达式 $x$, }
+        \Ensure {新的希望取小的符号的集合 $want\_min$, 新的希望取小的符号的集合 $want\_max$, 新的 want\_min 和 want\_max中每个符号希望的权 $new\_weight\_dic$}
+            \Function {ActReversePropagation}{$want\_min$, $want\_max$, $weight\_dic$, $x$}
+                
+                \State $new\_want\_min\gets []$;
+                \State $new\_want\_max\gets []$;
+                \State 初始化 $want\_min\_weight\_dic$, $want\_max\_weight\_dic$ 为字典;
+                
+                    \ForAll{$xii$ in $want\_min$}
+                        \State 计算 xii的索引, 然后从输入 x中获取对应的符号表达式 $express$;
+                        \ForAll符号表达式{$express$中的符号$xi$和权重$wi$}
+                            \If{$xi$ 是偏移（常数）的符号}
+                                \State 继续;
+                            \EndIf
+                            \If{$wi$ \textless 0}
+                                \State 将 $xi$ 添加到 $new\_want\_max$;
+                                \State $want\_max\_weight\_dic$[$xi$] += abs(wi) * $weight\_dic$[$xii$];
+                            \Else
+                                \State 将 $xi$ 添加到 $new\_want\_min$;
+                                \State $want\_min\_weight\_dic$[$xi$] += wi * $weight\_dic$[$xii$];
+                            \EndIf
+                        \EndFor
+                    \EndFor
+                
+                \State 对列表 $want\_max$ 做同样的处理;
+                \State
+                \State $want\_min\gets []$;
+                \State $want\_max\gets []$;
+                \State 初始化 $new\_want\_dic$ 为字典;
+                \ForAll{希望取大集合$new\_want\_max$的每个符号$xi$}
+                    \If{$xi$ 也在希望取小的集合 $new\_want\_min$中}
+                        \State 如果希望取小的权更大, 将 $xi$ 添加到 $want\_min$中, 否则将它添加到 $want\_max$中, 设置 $new\_want\_dic$ 中$xi$的新权为两种希望的差的绝对值;
+                    \Else
+                        \State 将 $xi$ 添加到$new\_want\_max$中, 设置 $new\_want\_dic$ 对应的权为希望取大的权;
+                    \EndIf
+                \EndFor
+                \State 对集合$new\_want\_max$做同样的处理
+                
+                \State
+                \Return $want\_min$, $want\_max$, $new\_want\_dic$;
+                
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+\end{CJK*}
+\end{document}

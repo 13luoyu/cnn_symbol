@@ -45,7 +45,7 @@ class MNIST:
 
 # c = MNIST()
 # print(c.train_labels.shape)
-# print(c.train_data.shape)
+# print(c.train_data)
 
 
 class MNIST_Model:

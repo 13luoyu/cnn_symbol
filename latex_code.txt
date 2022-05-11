@@ -212,5 +212,86 @@
         \end{algorithmic}
     \end{algorithm}
     
+    
+    
+    
+    \begin{algorithm}
+        \caption{Interval Compare Algorithm}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {label\_list $l$, true\_label $tl$, output\_interval $interval$}
+        \Ensure {wrong\_label\_list $wl$}
+            \Function {IntervalCompare}{$l$,$tl$,$interval$}
+                
+                \State Initialize wrong label list: $wl\gets []$;
+                
+                \ForAll{$label$ in $l$}
+                    \State $i1\gets interval[tl]$;
+                    \State $i2\gets interval[label]$;
+                    \State Assume $i1$ = [$a$,$b$], i2=[$c$,$d$];
+                    \If{$a$ \textless $d$}
+                        \State Add $label$ to $wl$;
+                    \EndIf
+                \EndFor
+                \State
+                \Return $wl$
+                
+                
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
+    
+    
+    
+    
+    \begin{algorithm}
+        \caption{Reverse Symbol Propagation in Activation Function Layer}
+        \begin{algorithmic}[1] %每行显示行号
+        \Require {the index of symbol hope to be min $want\_min$, the index of symbol hope to be max $want\_max$, the weight of want\_min and want\_max $weight\_dic$, input symbol expression $x$, }
+        \Ensure {new symbol hope to be min $want\_min$, new symbol hope to be max $want\_max$, the new weight of want\_min and want\_max $new\_weight\_dic$}
+            \Function {ActReversePropagation}{$want\_min$, $want\_max$, $weight\_dic$, $x$}
+                
+                \State $new\_want\_min\gets []$;
+                \State $new\_want\_max\gets []$;
+                \State Initialize $want\_min\_weight\_dic$, $want\_max\_weight\_dic$ as dictionary;
+                
+                    \ForAll{$xii$ in $want\_min$}
+                        \State Calculate the index of xii, then get its input express from x as $express$;
+                        \ForAll{$xi$, $wi$ in $express$}
+                            \If{$xi$ is the symbol of bias}
+                                \State continue;
+                            \EndIf
+                            \If{$wi$ \textless 0}
+                                \State Add $xi$ to $new\_want\_max$;
+                                \State $want\_max\_weight\_dic$[$xi$] += abs(wi) * $weight\_dic$[$xii$];
+                            \Else
+                                \State Add $xi$ to $new\_want\_min$;
+                                \State $want\_min\_weight\_dic$[$xi$] += wi * $weight\_dic$[$xii$];
+                            \EndIf
+                        \EndFor
+                    \EndFor
+                
+                \State Do the same thing to list $want\_max$ just as below;
+                
+                \State $want\_min\gets []$;
+                \State $want\_max\gets []$;
+                \State Initialize $new\_want\_dic$ as dictionary;
+                \ForAll{$xi$ in $new\_want\_max$}
+                    \If{$xi$ in $new\_want\_min$ and $new\_want\_max$}
+                        \State If the weight of min is larger, add $xi$ to $want\_min$, else add it to $want\_max$, set $new\_want\_dic$ of $xi$ to the difference of the two weight below;
+                    \Else
+                        \State set $xi$ to where it want, and set its $new\_want\_dic$ to its weight;
+                    \EndIf
+                \EndFor
+                
+                \State
+                \Return $want\_min$, $want\_max$, $new\_want\_dic$;
+                
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+    
+    
 \end{CJK*}
 \end{document}
