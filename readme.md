@@ -1,5 +1,4 @@
 # CNN-SYMBOL——基于符号区间的神经网络鲁棒性验证工具
-### 作者：薛志一
 
 1. 项目分别在MNIST数据集和CIFAR-10数据集上训练了一个简化的VGG模型，模型以及数据集、训练过程定义在
 setup_mnist.py和setup_cifar10.py中，训练好的模型包存在model目录下
